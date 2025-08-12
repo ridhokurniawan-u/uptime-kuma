@@ -31,13 +31,14 @@
             <div>{{ timeSinceLastBeat }}</div>
         </div>
 
-        <!-- Custom Tooltip -->
-        <Tooltip
+        <!-- Enhanced Custom Tooltip -->
+        <EnhancedTooltip
             :visible="tooltipVisible"
             :content="tooltipContent"
             :x="tooltipX"
             :y="tooltipY"
             :position="tooltipPosition"
+            :monitorId="monitorId"
         />
     </div>
 </template>
@@ -45,11 +46,11 @@
 <script>
 import dayjs from "dayjs";
 import { DOWN, UP, PENDING, MAINTENANCE } from "../util.ts";
-import Tooltip from "./Tooltip.vue";
+import EnhancedTooltip from "./EnhancedTooltip.vue";
 
 export default {
     components: {
-        Tooltip,
+        EnhancedTooltip,
     },
     props: {
         /** Size of the heartbeat bar */
@@ -81,13 +82,18 @@ export default {
             beatHoverAreaPadding: 4,
             move: false,
             maxBeat: -1,
-            // Tooltip data
+            // Enhanced tooltip data
             tooltipVisible: false,
             tooltipContent: null,
             tooltipX: 0,
             tooltipY: 0,
             tooltipPosition: "below",
             tooltipTimeoutId: null,
+            // Status constants for template
+            DOWN,
+            UP,
+            PENDING,
+            MAINTENANCE,
         };
     },
     computed: {
@@ -378,7 +384,7 @@ export default {
         },
 
         /**
-         * Show custom tooltip
+         * Enhanced tooltip with rich information
          * @param {object} beat Beat data
          * @param {Event} event Mouse event
          * @returns {void}
@@ -406,7 +412,7 @@ export default {
                 const y = rect.top;
 
                 // Check if tooltip would go off-screen and adjust position
-                const tooltipHeight = 80; // Approximate tooltip height
+                const tooltipHeight = 120; // Increased for enhanced tooltip
                 const viewportHeight = window.innerHeight;
                 const spaceAbove = y;
                 const spaceBelow = viewportHeight - y - rect.height;
@@ -422,7 +428,7 @@ export default {
                 }
 
                 // Ensure tooltip doesn't go off the left or right edge
-                const tooltipWidth = 120; // Approximate tooltip width
+                const tooltipWidth = 200; // Increased width for enhanced tooltip
                 let adjustedX = x;
 
                 if ((x - tooltipWidth / 2) < 10) {
