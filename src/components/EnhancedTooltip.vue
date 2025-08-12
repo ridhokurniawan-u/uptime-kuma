@@ -35,7 +35,7 @@
             
             <!-- Total Uptime Percentage -->
             <div v-if="uptimePercentage !== null" class="tooltip-row uptime-row">
-                <span class="tooltip-label">Uptime:</span>
+                <span class="tooltip-label">Uptime (24h):</span>
                 <span class="tooltip-value uptime-percentage" :class="uptimeClass">
                     <i class="fas fa-chart-line"></i>
                     {{ uptimePercentage }}%
@@ -176,86 +176,89 @@ export default {
         responseCode() {
             if (!this.content) return null;
             
+            console.log('Checking response code for content:', this.content);
+            
             // First try the direct fields
             const directCode = this.content.status_code ?? 
                               this.content.responseCode ?? 
                               this.content.code ?? 
                               this.content.http_code ?? 
                               this.content.httpCode ?? 
+                              this.content.statusCode ??
                               null;
+            
+            console.log('Direct code found:', directCode);
             
             if (directCode !== null) return directCode;
             
             // Try to extract from message field (e.g., "200 - OK")
-            if (this.content.msg) {
+            if (this.content.msg && this.content.msg.trim() !== '') {
+                console.log('Checking message for status code:', this.content.msg);
                 const match = this.content.msg.match(/^(\d{3})\s*-/);
                 if (match) {
-                    return parseInt(match[1]);
+                    const extractedCode = parseInt(match[1]);
+                    console.log('Extracted code from message:', extractedCode);
+                    return extractedCode;
                 }
             }
             
+            // For UP status without explicit code, assume 200
+            if (this.content.status === 1 && !this.content.msg) {
+                console.log('UP status with no message, assuming 200');
+                return 200;
+            }
+            
+            console.log('No response code found');
             return null;
         },
         
         // Check if error message should be shown
         hasErrorMessage() {
             return this.content?.msg && 
-                   (this.content.status === DOWN || this.content.status === 0);
+                   (this.content.status === DOWN || this.content.status === 0) &&
+                   !this.content.msg.match(/^\d{3}\s*-/); // Don't show as error if it's just a status code
         },
         
+
         uptimePercentage() {
             // Try multiple ways to get uptime data
             if (!this.monitorId) return null;
             
-            // Method 1: From $root.uptimeList
-            if (this.$root.uptimeList && this.$root.uptimeList[this.monitorId]) {
-                const uptimeData = this.$root.uptimeList[this.monitorId];
-                const uptime = uptimeData["24"] ?? 
-                              uptimeData["1"] ??
-                              uptimeData.uptime ??
-                              uptimeData["24h"] ??
-                              uptimeData["1d"];
-                if (uptime !== undefined && uptime !== null) {
-                    return Math.round(uptime * 10000) / 100;
+            // Method 1: From $root.uptimeList with different key formats
+            if (this.$root.uptimeList) {
+                // Try different key formats that are commonly used
+                const possibleKeys = [
+                    `${this.monitorId}_24`,    // "1_24" (24 hour uptime)
+                    `${this.monitorId}_1`,     // "1_1" (1 hour uptime) 
+                    `${this.monitorId}`,       // "1" (direct monitor ID)
+                    this.monitorId             // numeric key
+                ];
+                
+                for (const key of possibleKeys) {
+                    const uptime = this.$root.uptimeList[key];
+                    if (uptime !== undefined && uptime !== null && !isNaN(uptime) && uptime >= 0) {
+                        // Check if uptime is already a percentage (0-100) or ratio (0-1)
+                        if (uptime <= 1) {
+                            // It's a ratio, convert to percentage
+                            return Math.round(uptime * 10000) / 100;
+                        } else {
+                            // It's already a percentage
+                            return Math.round(uptime * 100) / 100;
+                        }
+                    }
                 }
             }
             
             // Method 2: From monitor data
             if (this.$root.monitorList && this.$root.monitorList[this.monitorId]) {
                 const monitor = this.$root.monitorList[this.monitorId];
-                if (monitor.uptime !== undefined && monitor.uptime !== null) {
-                    return Math.round(monitor.uptime * 10000) / 100;
-                }
-            }
-            
-            // Method 3: From stats data (if available in root)
-            if (this.$root.stats && this.$root.stats[this.monitorId]) {
-                const stats = this.$root.stats[this.monitorId];
-                if (stats.uptime !== undefined) {
-                    return Math.round(stats.uptime * 100) / 100;
-                }
-            }
-            
-            // Method 4: From content itself (if it contains uptime info)
-            if (this.content && this.content.uptime !== undefined) {
-                return Math.round(this.content.uptime * 10000) / 100;
-            }
-            
-            // Method 5: Try to find uptime from any root property containing uptime
-            try {
-                for (const key in this.$root) {
-                    if (typeof this.$root[key] === 'object' && this.$root[key] && this.$root[key][this.monitorId]) {
-                        const data = this.$root[key][this.monitorId];
-                        if (data.uptime !== undefined || data['24'] !== undefined) {
-                            const uptime = data.uptime ?? data['24'];
-                            if (uptime !== null && uptime !== undefined) {
-                                return Math.round(uptime * 10000) / 100;
-                            }
-                        }
+                if (monitor.uptime !== undefined && monitor.uptime !== null && !isNaN(monitor.uptime)) {
+                    if (monitor.uptime <= 1) {
+                        return Math.round(monitor.uptime * 10000) / 100;
+                    } else {
+                        return Math.round(monitor.uptime * 100) / 100;
                     }
                 }
-            } catch (e) {
-                // Ignore errors in exploration
             }
             
             return null;
@@ -334,7 +337,20 @@ export default {
         }
     }
     
-    &.error-row, &.uptime-row {
+    &.error-row {
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        padding-top: 6px;
+        margin-top: 2px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+        
+        .dark & {
+            border-top-color: rgba(0, 0, 0, 0.2);
+        }
+    }
+    
+    &.uptime-row {
         border-top: 1px solid rgba(255, 255, 255, 0.2);
         padding-top: 6px;
         margin-top: 2px;
@@ -450,9 +466,9 @@ export default {
 .error-msg {
     color: #dc3545;
     font-size: 11px;
-    max-width: 150px;
     word-break: break-word;
-    text-align: right;
+    text-align: left;
+    line-height: 1.3;
     
     .dark & {
         color: #dc3545;
